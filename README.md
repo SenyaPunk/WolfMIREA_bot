@@ -1,2 +1,2 @@
 # WolfMIREA_bot
-telegram bot for chat MIREA 
+всем привет. Создатель Арсений (@Senya_Pnk)
