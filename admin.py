@@ -1,4 +1,3 @@
-"""Модуль системы администрирования."""
 from typing import Optional
 from telegram import Update
 from telegram.constants import ChatType

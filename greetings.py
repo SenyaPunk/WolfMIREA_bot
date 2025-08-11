@@ -1,4 +1,3 @@
-"""Модуль системы приветствий."""
 import asyncio
 import logging
 import base64

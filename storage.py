@@ -1,4 +1,3 @@
-"""Модуль для работы с хранилищем данных."""
 import json
 import logging
 from typing import Dict, Any
@@ -9,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 def load_store() -> Dict[str, dict]:
-    """Загружает данные подписчиков."""
+    # загружаем подписки
     if not STORE_FILE.exists():
         return {}
     try:
@@ -21,7 +20,7 @@ def load_store() -> Dict[str, dict]:
 
 
 def save_store(data: Dict[str, dict]) -> None:
-    """Сохраняет данные подписчиков."""
+    # Сохраняем подпискм
     try:
         with open(STORE_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
@@ -30,7 +29,7 @@ def save_store(data: Dict[str, dict]) -> None:
 
 
 def load_marriage() -> Dict[str, Any]:
-    """Загружает данные браков."""
+    # браки
     if not MARRIAGE_FILE.exists():
         return {"proposals": {}, "marriages": []}
     try:
@@ -42,7 +41,7 @@ def load_marriage() -> Dict[str, Any]:
 
 
 def save_marriage(data: Dict[str, Any]) -> None:
-    """Сохраняет данные браков."""
+    # браки
     try:
         with open(MARRIAGE_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
@@ -51,7 +50,7 @@ def save_marriage(data: Dict[str, Any]) -> None:
 
 
 def load_admins() -> Dict[str, Any]:
-    """Загружает данные админов."""
+    # админы
     import os
     data = {"owner_id": 0, "admins": [], "custom_commands": {}}
     if ADMINS_FILE.exists():
@@ -72,7 +71,7 @@ def load_admins() -> Dict[str, Any]:
 
 
 def save_admins(data: Dict[str, Any]) -> None:
-    """Сохраняет данные админов."""
+    # сохраняем админов
     try:
         with open(ADMINS_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
@@ -81,7 +80,6 @@ def save_admins(data: Dict[str, Any]) -> None:
 
 
 def load_cooldowns() -> Dict[str, Dict[str, float]]:
-    """Загружает данные кулдаунов."""
     if not COOLDOWNS_FILE.exists():
         return {}
     try:
@@ -93,7 +91,6 @@ def load_cooldowns() -> Dict[str, Dict[str, float]]:
 
 
 def save_cooldowns(data: Dict[str, Dict[str, float]]) -> None:
-    """Сохраняет данные кулдаунов."""
     try:
         with open(COOLDOWNS_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
@@ -102,12 +99,6 @@ def save_cooldowns(data: Dict[str, Dict[str, float]]) -> None:
 
 
 def check_cooldown(user_id: int, chat_id: int, command: str, cooldown_seconds: int) -> tuple[bool, int]:
-    """
-    Проверяет кулдаун для команды.
-    
-    Returns:
-        tuple: (можно_использовать, оставшееся_время_в_секундах)
-    """
     import time
     
     cooldowns = load_cooldowns()
@@ -120,11 +111,9 @@ def check_cooldown(user_id: int, chat_id: int, command: str, cooldown_seconds: i
     last_used = cooldowns[key].get(command, 0)
     
     if current_time - last_used >= cooldown_seconds:
-        # Кулдаун прошел, обновляем время
         cooldowns[key][command] = current_time
         save_cooldowns(cooldowns)
         return True, 0
     else:
-        # Кулдаун еще активен
         remaining = int(cooldown_seconds - (current_time - last_used))
         return False, remaining

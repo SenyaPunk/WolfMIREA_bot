@@ -1,4 +1,3 @@
-"""Модуль системы браков."""
 import secrets
 import time
 from typing import Dict, Any, Optional, Tuple

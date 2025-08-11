@@ -1,4 +1,3 @@
-"""Модуль системы кастомных команд."""
 import logging
 from telegram import Update
 from telegram.constants import ParseMode

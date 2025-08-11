@@ -1,4 +1,3 @@
-"""Модуль системы настроек."""
 from dataclasses import dataclass
 from typing import Dict
 from zoneinfo import ZoneInfo

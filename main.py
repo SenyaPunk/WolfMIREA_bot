@@ -116,12 +116,10 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Команда помощи."""
     await update.message.reply_text(HELP_TEXT)
 
 
 def bootstrap_application() -> Application:
-    """Создает и настраивает приложение бота."""
     if not TELEGRAM_BOT_TOKEN:
         raise RuntimeError("Environment variable TELEGRAM_BOT_TOKEN is not set.")
 
@@ -130,7 +128,7 @@ def bootstrap_application() -> Application:
 
     app.add_handler(TypeHandler(Update, block_chat_handler), group=-100)
 
-    # Основные 
+    # база 
     app.add_handler(CommandHandler("start", handle_start))
     app.add_handler(CommandHandler("stop", stop))
     app.add_handler(CommandHandler("set_morning", set_morning))
@@ -140,19 +138,19 @@ def bootstrap_application() -> Application:
     app.add_handler(CommandHandler("preview", preview_greeting))
     app.add_handler(CommandHandler("help", help_cmd))
 
-    # Админские команды
+    # админ
     app.add_handler(CommandHandler("admin_claim", admin_claim))
     app.add_handler(CommandHandler("admins", admins_list))
     app.add_handler(CommandHandler("admin_add", admin_add))
     app.add_handler(CommandHandler("admin_remove", admin_remove))
 
-    # Кастомные команды
+    # кастом
     app.add_handler(CommandHandler("cc_set", cc_cmd_set))
     app.add_handler(CommandHandler("cc_set_photo", cc_cmd_set_photo))
     app.add_handler(CommandHandler("cc_remove", cc_cmd_remove))
     app.add_handler(CommandHandler("cc_list", cc_cmd_list))
 
-    # Система браков
+    # браки
     app.add_handler(CommandHandler(["marry"], cmd_marry, filters=filters.ChatType.GROUPS))
     app.add_handler(CommandHandler(["marriages"], cmd_marriages, filters=filters.ChatType.GROUPS))
     app.add_handler(CommandHandler(["divorce"], cmd_divorce, filters=filters.ChatType.GROUPS))
@@ -163,11 +161,9 @@ def bootstrap_application() -> Application:
 
     app.add_handler(MessageHandler(filters.ChatType.GROUPS & filters.Regex(r"^/трахнуть(?:@\w+)?(?:\s|$)"), cmd_kiss))
 
-    # Роутер кастомных команд
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, custom_command_router))
     app.add_handler(MessageHandler(filters.Regex(r"^/"), custom_command_router))
 
-    # Восстанавливаем расписания
     store = load_store()
     for chat_id_str, cfg in store.items():
         try:
