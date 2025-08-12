@@ -11,6 +11,14 @@ def mention_html(user_id: int, name: str) -> str:
     return f'<a href="tg://user?id={user_id}">{safe_html(name)}</a>'
 
 
+def profile_link_html(user_id: int, name: str, username: Optional[str] = None) -> str:
+    """Create a link to user profile without pinging them"""
+    if username:
+        return f'<a href="https://t.me/{username}">{safe_html(name)}</a>'
+    else:
+        return safe_html(name)
+
+
 def display_name_from_user(user) -> str:
     if getattr(user, "full_name", ""):
         return user.full_name

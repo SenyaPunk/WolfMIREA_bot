@@ -20,8 +20,10 @@ from settings import ChatSettings, get_chat_settings, stop, set_morning, set_eve
 from greetings import schedule_for_chat, preview_greeting
 from admin import admin_claim, admins_list, admin_add, admin_remove, ensure_admin
 from custom_commands import cc_cmd_set, cc_cmd_set_photo, cc_cmd_remove, cc_cmd_list, custom_command_router
-from marriages import cmd_marry, cmd_marriages, cmd_divorce, cb_marry
+from marriages import cmd_marry, cmd_marriages, cmd_divorce, cb_marry, cmd_expand, cmd_close_marriage
 from kisses import cmd_kiss
+from drinking import cmd_drink, cb_drink
+from selfcare import cmd_selfcare, cb_ribs
 
 logging.basicConfig(
     level=logging.INFO,
@@ -78,7 +80,9 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             "• Воспользуйтесь /брак в ответ на сообщение пользователя (или текстовым упоминанием)\n"
             "• Принятие/отказ — в личных сообщениях с ботом\n"
             "• Посмотреть пары: /браки\n"
-            "• Кого-нибудь трахнуть: /трахнуть"
+            "• Кого-нибудь трахнуть: /трахнуть\n"
+            "• Выпить алкоголь: /выпить\n"
+            "• Самоотсос для одиноких: /самоотсос"
         )
         return
 
@@ -157,9 +161,16 @@ def bootstrap_application() -> Application:
     app.add_handler(MessageHandler(filters.ChatType.GROUPS & filters.Regex(r"^/брак(?:@\w+)?(?:\s|$)"), cmd_marry))
     app.add_handler(MessageHandler(filters.ChatType.GROUPS & filters.Regex(r"^/браки(?:@\w+)?(?:\s|$)"), cmd_marriages))
     app.add_handler(MessageHandler(filters.ChatType.GROUPS & filters.Regex(r"^/развод(?:@\w+)?(?:\s|$)"), cmd_divorce))
+    app.add_handler(MessageHandler(filters.ChatType.GROUPS & filters.Regex(r"^/расширить(?:@\w+)?(?:\s|$)"), cmd_expand))
+    app.add_handler(MessageHandler(filters.ChatType.GROUPS & filters.Regex(r"^/закрыть_брак(?:@\w+)?(?:\s|$)"), cmd_close_marriage))
     app.add_handler(CallbackQueryHandler(cb_marry, pattern=r"^(accept|decline):"))
 
+    # развлечения
     app.add_handler(MessageHandler(filters.ChatType.GROUPS & filters.Regex(r"^/трахнуть(?:@\w+)?(?:\s|$)"), cmd_kiss))
+    app.add_handler(MessageHandler(filters.Regex(r"^/выпить(?:@\w+)?(?:\s|$)"), cmd_drink))
+    app.add_handler(MessageHandler(filters.ChatType.GROUPS & filters.Regex(r"^/самоотсос(?:@\w+)?(?:\s|$)"), cmd_selfcare))
+    app.add_handler(CallbackQueryHandler(cb_drink, pattern=r"^drink:"))
+    app.add_handler(CallbackQueryHandler(cb_ribs, pattern=r"^ribs:"))
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, custom_command_router))
     app.add_handler(MessageHandler(filters.Regex(r"^/"), custom_command_router))

@@ -1,1 +1,307 @@
-{}
+{
+  "proposals": {
+    "ZLzWRIc-QkQ": {
+      "id": "ZLzWRIc-QkQ",
+      "chat_id": -1002578226318,
+      "proposer_id": 5998617049,
+      "proposer_name": "масик",
+      "proposer_username": "eeofxnse",
+      "target_id": 977352479,
+      "target_username": "sv_am",
+      "target_name": "Никита",
+      "type": "regular",
+      "created_at": 1754929785,
+      "status": "accepted"
+    },
+    "iQGSfLdiEKk": {
+      "id": "iQGSfLdiEKk",
+      "chat_id": -1002578226318,
+      "proposer_id": 5275274237,
+      "proposer_name": "¹²⁴⁰ марзия вахобова",
+      "proposer_username": null,
+      "target_id": 8485591723,
+      "target_username": "WolfMIREA_bot",
+      "target_name": "WolfMIREA",
+      "type": "regular",
+      "created_at": 1754929906,
+      "status": "pending"
+    },
+    "BvpSez7UKe0": {
+      "id": "BvpSez7UKe0",
+      "chat_id": -1002578226318,
+      "proposer_id": 855655005,
+      "proposer_name": "professor",
+      "proposer_username": null,
+      "target_id": 702438453,
+      "target_username": "iiaasjk",
+      "target_name": "☮︎ терияки",
+      "type": "regular",
+      "created_at": 1754930165,
+      "status": "accepted"
+    },
+    "QOgpXkqzV8Y": {
+      "id": "QOgpXkqzV8Y",
+      "chat_id": -1002578226318,
+      "proposer_id": 5275274237,
+      "proposer_name": "¹²⁴⁰ марзия вахобова",
+      "proposer_username": null,
+      "target_id": 1072997316,
+      "target_username": "flihha",
+      "target_name": "nsnns🥴🐾",
+      "type": "regular",
+      "created_at": 1754930376,
+      "status": "accepted"
+    },
+    "e6Jmw2JO9sE": {
+      "id": "e6Jmw2JO9sE",
+      "chat_id": -1002578226318,
+      "proposer_id": 5841941223,
+      "proposer_name": ".",
+      "proposer_username": null,
+      "target_id": 5998617049,
+      "target_username": "eeofxnse",
+      "target_name": "масик",
+      "type": "regular",
+      "created_at": 1754933829,
+      "status": "accepted"
+    },
+    "ySJAWO4WZ7s": {
+      "id": "ySJAWO4WZ7s",
+      "chat_id": -1002578226318,
+      "proposer_id": 1076278520,
+      "proposer_name": "DanilMini",
+      "proposer_username": null,
+      "target_id": 977352479,
+      "target_username": "sv_am",
+      "target_name": "Никита",
+      "type": "regular",
+      "created_at": 1754933844,
+      "status": "declined"
+    },
+    "2lqdT1Sizro": {
+      "id": "2lqdT1Sizro",
+      "chat_id": -1002578226318,
+      "proposer_id": 977352479,
+      "proposer_name": "Никита",
+      "proposer_username": "sv_am",
+      "target_id": 1078527140,
+      "target_username": "vienek",
+      "target_name": "︎",
+      "type": "regular",
+      "created_at": 1754935585,
+      "status": "accepted"
+    },
+    "Rn5sxgvwrp4": {
+      "id": "Rn5sxgvwrp4",
+      "chat_id": -1002578226318,
+      "proposer_id": 1076278520,
+      "proposer_name": "DanilMini",
+      "proposer_username": null,
+      "target_id": 1078527140,
+      "target_username": "vienek",
+      "target_name": "︎",
+      "type": "regular",
+      "created_at": 1754935656,
+      "status": "pending"
+    },
+    "Raqmbc-Nksk": {
+      "id": "Raqmbc-Nksk",
+      "chat_id": -1002578226318,
+      "proposer_id": 1198610448,
+      "proposer_name": "тёма",
+      "proposer_username": null,
+      "target_id": 376659431,
+      "target_username": "platon1108",
+      "target_name": "Платон",
+      "type": "regular",
+      "created_at": 1754936408,
+      "status": "accepted"
+    },
+    "WRTBXgYMQsY": {
+      "id": "WRTBXgYMQsY",
+      "chat_id": -1002578226318,
+      "proposer_id": 1281036021,
+      "proposer_name": "викулик",
+      "proposer_username": null,
+      "target_id": 1365615433,
+      "target_username": "keo0ke",
+      "target_name": "keok.e🎚",
+      "type": "regular",
+      "created_at": 1754936875,
+      "status": "accepted"
+    },
+    "3FEV-vVOOTs": {
+      "id": "3FEV-vVOOTs",
+      "chat_id": -1002578226318,
+      "proposer_id": 986827447,
+      "proposer_name": "Камушек",
+      "proposer_username": null,
+      "target_id": 728969333,
+      "target_username": "sutomiz",
+      "target_name": "Василиса",
+      "type": "regular",
+      "created_at": 1754936975,
+      "status": "pending"
+    },
+    "omFLOHRtL-s": {
+      "id": "omFLOHRtL-s",
+      "chat_id": -1002578226318,
+      "proposer_id": 339250369,
+      "proposer_name": "Tim Ruk",
+      "proposer_username": null,
+      "target_id": 2018747942,
+      "target_username": "Sh0k0zavr",
+      "target_name": "Sh0k0zavr",
+      "type": "regular",
+      "created_at": 1754939325,
+      "status": "pending"
+    },
+    "1qgdgMe8VOg": {
+      "id": "1qgdgMe8VOg",
+      "chat_id": -1002812765224,
+      "proposer_id": 5841941223,
+      "proposer_name": ".",
+      "proposer_username": null,
+      "target_id": null,
+      "target_username": "senkpnk",
+      "target_name": "@senkpnk",
+      "type": "regular",
+      "created_at": 1754940969,
+      "status": "accepted"
+    },
+    "H8nJxlm0akM": {
+      "id": "H8nJxlm0akM",
+      "chat_id": -1002578226318,
+      "proposer_id": 986827447,
+      "proposer_name": "Камушек",
+      "proposer_username": null,
+      "target_id": 728969333,
+      "target_username": "sutomiz",
+      "target_name": "Василиса",
+      "type": "regular",
+      "created_at": 1754948440,
+      "status": "pending"
+    }
+  },
+  "marriages": [
+    {
+      "chat_id": -1002578226318,
+      "members": [
+        {
+          "id": 855655005,
+          "name": "professor",
+          "username": null
+        },
+        {
+          "id": 702438453,
+          "name": "☮︎ терияки",
+          "username": "iiaasjk"
+        }
+      ],
+      "since": 1754930197,
+      "expanded": false
+    },
+    {
+      "chat_id": -1002578226318,
+      "members": [
+        {
+          "id": 5275274237,
+          "name": "¹²⁴⁰ марзия вахобова",
+          "username": null
+        },
+        {
+          "id": 1072997316,
+          "name": "nsnns🥴🐾",
+          "username": "flihha"
+        }
+      ],
+      "since": 1754930382,
+      "expanded": false
+    },
+    {
+      "chat_id": -1002578226318,
+      "members": [
+        {
+          "id": 5841941223,
+          "name": ".",
+          "username": null
+        },
+        {
+          "id": 5998617049,
+          "name": "масик",
+          "username": "eeofxnse"
+        }
+      ],
+      "since": 1754933871,
+      "expanded": false
+    },
+    {
+      "chat_id": -1002578226318,
+      "members": [
+        {
+          "id": 977352479,
+          "name": "Никита",
+          "username": "sv_am"
+        },
+        {
+          "id": 1078527140,
+          "name": "︎",
+          "username": "vienek"
+        }
+      ],
+      "since": 1754936152,
+      "expanded": false
+    },
+    {
+      "chat_id": -1002578226318,
+      "members": [
+        {
+          "id": 1198610448,
+          "name": "тёма",
+          "username": null
+        },
+        {
+          "id": 376659431,
+          "name": "Платон",
+          "username": "platon1108"
+        }
+      ],
+      "since": 1754936596,
+      "expanded": false
+    },
+    {
+      "chat_id": -1002578226318,
+      "members": [
+        {
+          "id": 1281036021,
+          "name": "викулик",
+          "username": null
+        },
+        {
+          "id": 1365615433,
+          "name": "keok.e🎚",
+          "username": "keo0ke"
+        }
+      ],
+      "since": 1754936882,
+      "expanded": false
+    },
+    {
+      "chat_id": -1002812765224,
+      "members": [
+        {
+          "id": 5841941223,
+          "name": ".",
+          "username": null
+        },
+        {
+          "id": 7166339594,
+          "name": ".",
+          "username": "senkpnk"
+        }
+      ],
+      "since": 1754940981,
+      "expanded": false
+    }
+  ]
+}
