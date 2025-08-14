@@ -337,6 +337,8 @@ async def cmd_drink(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         context.job_queue.run_once(delete_warning, 3)
         return
     
+    set_drinking_cooldown(user.id, chat_id)
+    
     # Создаем сообщение с выбором напитков
     keyboard = create_drink_keyboard(user.id)
     
@@ -388,9 +390,7 @@ async def cb_drink(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # Создаем клавиатуру для продолжения (если не достигнут лимит)
     keyboard = create_continue_keyboard(user_id, drink_type, level)
     
-    # Если достигнут максимум, устанавливаем кулдаун
     if level >= MAX_DRINKS:
-        set_drinking_cooldown(user_id, query.message.chat.id)
         full_message += f"\n\n🚫 <b>Всё, хватит на сегодня!</b>\n⏰ <i>Следующая попойка через {DRINKING_COOLDOWN // 60} минут</i>"
     
     try:

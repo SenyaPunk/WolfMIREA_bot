@@ -243,14 +243,12 @@ async def cb_ribs(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     remaining = RIBS_REQUIRED - broken_ribs
     
     if remaining > 0:
-        # Еще нужно ломать ребра
         rib_message = random.choice(RIBS_MESSAGES).format(remaining=remaining)
-        keyboard = create_ribs_keyboard(user_id)
+        rib_message += "\n\n💡 <i>Используйте /самоотсос снова, чтобы сломать следующее ребро!</i>"
         
         try:
             await query.edit_message_text(
                 rib_message,
-                reply_markup=keyboard,
                 parse_mode=ParseMode.HTML
             )
         except Exception as e:

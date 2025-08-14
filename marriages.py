@@ -254,6 +254,15 @@ async def cmd_marry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "created_at": int(time.time()),
         "status": "pending",
     }
+    
+    if proposal_type == "join_family" and target_marriage:
+        # Сохраняем индекс целевого брака для точного определения
+        target_marriage_idx = find_marriage_index(store, chat_id, target_user.id if target_user else None)
+        if target_marriage_idx is not None:
+            proposal["target_marriage_idx"] = target_marriage_idx
+            # Также сохраняем ID всех участников целевого брака для дополнительной проверки
+            proposal["target_marriage_members"] = [m["id"] for m in target_marriage.get("members", [])]
+    
     store["proposals"][pid] = proposal
     save_marriage(store)
 
@@ -429,21 +438,49 @@ async def cb_marry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             )
             
         else:  # join_family
-            # Просьба присоединиться к семье пользователя
-            user_marriage = get_user_marriage(store, prop["chat_id"], user.id)
-            if not user_marriage or not can_join_marriage(user_marriage):
-                await cq.answer("❌ Ваша семья больше не принимает новых участников.", show_alert=True)
-                return
+            # Проверяем, есть ли сохраненная информация о целевом браке
+            if "target_marriage_idx" in prop and "target_marriage_members" in prop:
+                target_marriage_idx = prop["target_marriage_idx"]
+                target_marriage_members = prop["target_marriage_members"]
                 
-            # Добавляем предлагающего в семью пользователя
-            marriage_idx = find_marriage_index(store, prop["chat_id"], user.id)
-            store["marriages"][marriage_idx]["members"].append({
-                "id": prop["proposer_id"],
-                "name": prop["proposer_name"],
-                "username": prop.get("proposer_username")
-            })
+                # Проверяем, что брак все еще существует и пользователь в нем
+                if (target_marriage_idx < len(store["marriages"]) and 
+                    store["marriages"][target_marriage_idx]["chat_id"] == prop["chat_id"] and
+                    user.id in target_marriage_members):
+                    
+                    target_marriage = store["marriages"][target_marriage_idx]
+                    if not can_join_marriage(target_marriage):
+                        await cq.answer("❌ Семья больше не принимает новых участников.", show_alert=True)
+                        return
+                    
+                    # Добавляем предлагающего в правильный брак
+                    store["marriages"][target_marriage_idx]["members"].append({
+                        "id": prop["proposer_id"],
+                        "name": prop["proposer_name"],
+                        "username": prop.get("proposer_username")
+                    })
+                    
+                    family_size = len(store["marriages"][target_marriage_idx]["members"])
+                else:
+                    await cq.answer("❌ Целевая семья больше не существует или изменилась.", show_alert=True)
+                    return
+            else:
+                # Fallback к старой логике (если предложение создано до обновления)
+                user_marriage = get_user_marriage(store, prop["chat_id"], user.id)
+                if not user_marriage or not can_join_marriage(user_marriage):
+                    await cq.answer("❌ Ваша семья больше не принимает новых участников.", show_alert=True)
+                    return
+                    
+                # Добавляем предлагающего в семью пользователя
+                marriage_idx = find_marriage_index(store, prop["chat_id"], user.id)
+                store["marriages"][marriage_idx]["members"].append({
+                    "id": prop["proposer_id"],
+                    "name": prop["proposer_name"],
+                    "username": prop.get("proposer_username")
+                })
+                
+                family_size = len(store["marriages"][marriage_idx]["members"])
             
-            family_size = len(store["marriages"][marriage_idx]["members"])
             success_text = (
                 f"👨‍👩‍👧‍👦 <b>Новый член семьи!</b>\n\n"
                 f"✅ Вы приняли {safe_html(prop['proposer_name'])} в свою семью!\n"
@@ -457,6 +494,7 @@ async def cb_marry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 f"присоединился к семье!\n\n"
                 f"💍❤️ <i>Поздравляем с расширением семьи!</i> ❤️💍"
             )
+
 
         prop["status"] = "accepted"
         save_marriage(store)
@@ -585,7 +623,7 @@ async def cmd_divorce(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             f"😢 {mention_html(user.id, display_name_from_user(user))} покинул семью.\n"
             f"👥 В семье осталось {members_count - 1} человек.\n\n"
             f"🕊️ <i>Желаем найти новое счастье...</i>",
-            parse_mode=ParseMode.HTML,
+            parse_mode=ParseMode.HTML
         )
 
 
@@ -672,7 +710,7 @@ async def cmd_close_marriage(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await message.reply_text(
             "🔒 <b>Ваша семья уже закрыта!</b>\n\n"
             "👥 Новые участники не могут присоединиться.\n"
-            "🔓 Используйте /расширить чтобы разрешить новых участников.",
+            "🔓 Используйте /расширить чтобы снова разрешить новых участников.",
             parse_mode=ParseMode.HTML
         )
         return
