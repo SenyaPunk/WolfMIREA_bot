@@ -24,6 +24,7 @@ from marriages import cmd_marry, cmd_marriages, cmd_divorce, cb_marry, cmd_expan
 from kisses import cmd_kiss
 from drinking import cmd_drink, cb_drink
 from selfcare import cmd_selfcare, cb_ribs
+from birthday import init_birthday_scheduler
 
 logging.basicConfig(
     level=logging.INFO,
@@ -174,6 +175,8 @@ def bootstrap_application() -> Application:
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, custom_command_router))
     app.add_handler(MessageHandler(filters.Regex(r"^/"), custom_command_router))
+
+    init_birthday_scheduler(app)
 
     store = load_store()
     for chat_id_str, cfg in store.items():
