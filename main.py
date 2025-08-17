@@ -24,7 +24,7 @@ from marriages import cmd_marry, cmd_marriages, cmd_divorce, cb_marry, cmd_expan
 from kisses import cmd_kiss
 from drinking import cmd_drink, cb_drink
 from selfcare import cmd_selfcare, cb_ribs
-from birthday import init_birthday_scheduler
+from blackjack import cmd_blackjack, cmd_blackjack_add_time, cmd_blackjack_start, cb_blackjack_join, cb_blackjack_hit, cb_blackjack_stand
 
 logging.basicConfig(
     level=logging.INFO,
@@ -32,7 +32,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("tg-g4f-greetings")
 
-BLOCKED_CHAT_ID = -1002403119663  
+BLOCKED_CHAT_ID = -1002403119663   #
 
 
 def is_blocked_chat(update: Update) -> bool:
@@ -83,7 +83,8 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             "• Посмотреть пары: /браки\n"
             "• Кого-нибудь трахнуть: /трахнуть\n"
             "• Выпить алкоголь: /выпить\n"
-            "• Самоотсос для одиноких: /самоотсос"
+            "• Самоотсос для одиноких: /самоотсос\n"
+            "• Блекджек: /блекджек"
         )
         return
 
@@ -155,6 +156,14 @@ def bootstrap_application() -> Application:
     app.add_handler(CommandHandler("cc_remove", cc_cmd_remove))
     app.add_handler(CommandHandler("cc_list", cc_cmd_list))
 
+    # блекджек
+    app.add_handler(MessageHandler(filters.ChatType.GROUPS & filters.Regex(r"^/блекджек(?:@\w+)?(?:\s|$)"), cmd_blackjack))
+    app.add_handler(MessageHandler(filters.ChatType.GROUPS & filters.Regex(r"^/блекджек\+30сек(?:@\w+)?(?:\s|$)"), cmd_blackjack_add_time))
+    app.add_handler(MessageHandler(filters.ChatType.GROUPS & filters.Regex(r"^/блекджек_начать(?:@\w+)?(?:\s|$)"), cmd_blackjack_start))
+    app.add_handler(CallbackQueryHandler(cb_blackjack_join, pattern=r"^bj_join:"))
+    app.add_handler(CallbackQueryHandler(cb_blackjack_hit, pattern=r"^bj_hit:"))
+    app.add_handler(CallbackQueryHandler(cb_blackjack_stand, pattern=r"^bj_stand:"))
+
     # браки
     app.add_handler(CommandHandler(["marry"], cmd_marry, filters=filters.ChatType.GROUPS))
     app.add_handler(CommandHandler(["marriages"], cmd_marriages, filters=filters.ChatType.GROUPS))
@@ -176,7 +185,6 @@ def bootstrap_application() -> Application:
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, custom_command_router))
     app.add_handler(MessageHandler(filters.Regex(r"^/"), custom_command_router))
 
-    init_birthday_scheduler(app)
 
     store = load_store()
     for chat_id_str, cfg in store.items():
