@@ -3,14 +3,21 @@ import random
 import time
 import logging
 import os
-from typing import Dict, List, Optional, Set
+import json
+from pathlib import Path
+from typing import Dict, List, Optional, Set, Any
 from dataclasses import dataclass, field
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from telegram.constants import ParseMode, ChatType
 from telegram.ext import ContextTypes
 from admin import is_admin
+from economy import get_user_balance, add_user_balance
 
 logger = logging.getLogger(__name__)
+
+# Путь к папке с данными
+DATA_DIR = Path("data")
+DATA_DIR.mkdir(exist_ok=True)
 
 # Константы игры
 GAME_SIGNUP_TIME = 60  # 1 минута на набор игроков
@@ -33,14 +40,93 @@ class Card:
 @dataclass 
 class Player:
     """Игрок в блекджеке"""
-    user_id: int
-    username: str
-    first_name: str
-    cards: List[Card] = field(default_factory=list)
-    score: int = 0
-    is_bust: bool = False
-    is_blackjack: bool = False
-    is_stand: bool = False
+    
+    def __init__(self, user_id: int, username: str, first_name: str):
+        self.user_id = user_id
+        self.username = username
+        self.first_name = first_name
+        self.cards: List[Card] = []
+        self.score: int = 0
+        self.is_bust: bool = False
+        self.is_blackjack: bool = False
+        self.is_stand: bool = False
+        self.bet: int = 0  # текущая ставка игрока
+        self.temp_bet: int = 0  # временная ставка во время выбора
+        self.slave_bet: bool = False  # ставит ли игрок раба
+        self.slave_bet_info: Optional[Dict[str, Any]] = None  # информация о поставленном рабе
+
+def load_blackjack_stats() -> Dict[str, Any]:
+    """Загружает статистику блекджека."""
+    stats_file = DATA_DIR / "blackjack_stats.json"
+    if not stats_file.exists():
+        return {"stats": {}}
+    try:
+        with open(stats_file, "r", encoding="utf-8") as f:
+            data = json.load(f) or {}
+            data.setdefault("stats", {})
+            return data
+    except Exception as e:
+        logger.error("Failed to read blackjack stats: %s", e)
+        return {"stats": {}}
+
+
+def save_blackjack_stats(data: Dict[str, Any]) -> None:
+    """Сохраняет статистику блекджека."""
+    stats_file = DATA_DIR / "blackjack_stats.json"
+    try:
+        with open(stats_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.error("Failed to write blackjack stats: %s", e)
+
+
+def update_player_stats(user_id: int, result: str, user_name: str) -> None:
+    """Обновляет статистику игрока. result: 'win', 'loss', 'draw'"""
+    data = load_blackjack_stats()
+    user_key = str(user_id)
+    
+    if user_key not in data["stats"]:
+        data["stats"][user_key] = {
+            "wins": 0,
+            "losses": 0,
+            "draws": 0,
+            "games": 0,
+            "name": user_name
+        }
+    
+    stats = data["stats"][user_key]
+    stats["name"] = user_name  # Обновляем имя на случай изменения
+    stats["games"] += 1
+    
+    if result == "win":
+        stats["wins"] += 1
+    elif result == "loss":
+        stats["losses"] += 1
+    elif result == "draw":
+        stats["draws"] += 1
+    
+    save_blackjack_stats(data)
+
+
+def get_blackjack_leaderboard() -> List[Dict[str, Any]]:
+    """Возвращает топ игроков по блекджеку, отсортированный по победам, ничьим, поражениям."""
+    data = load_blackjack_stats()
+    players = []
+    
+    for user_id, stats in data["stats"].items():
+        players.append({
+            "user_id": int(user_id),
+            "name": stats["name"],
+            "wins": stats["wins"],
+            "losses": stats["losses"],
+            "draws": stats["draws"],
+            "games": stats["games"]
+        })
+    
+    # Сортируем: сначала по победам (убывание), потом по ничьим (убывание), потом по поражениям (возрастание)
+    players.sort(key=lambda x: (-x["wins"], -x["draws"], x["losses"]))
+    
+    return players
 
 class BlackjackGame:
     """Игра в блекджек"""
@@ -61,6 +147,8 @@ class BlackjackGame:
         self.current_player_index: int = 0  # Индекс текущего игрока
         self.dealer_hidden_card: Optional[Card] = None  # Скрытая карта дилера
         self.player_ids: Set[int] = set()  # ID игроков для фильтрации сообщений
+        self.is_betting_phase: bool = False  # фаза ставок
+        self.current_betting_player: int = 0  # индекс игрока, который делает ставку
         
     def create_deck(self) -> List[Card]:
         """Создать стандартную колоду карт"""
@@ -230,6 +318,113 @@ class BlackjackGame:
         
         return message
 
+    def get_betting_keyboard(self, player_index: int) -> InlineKeyboardMarkup:
+        """Создать клавиатуру для ставок"""
+        from economy import get_user_balance, get_user_slave
+        
+        player = self.players[player_index]
+        balance = get_user_balance(player.user_id)
+        slave_info = get_user_slave(player.user_id)
+        
+        buttons = []
+        # Кнопки фишек
+        chip_buttons = []
+        for chip in [5, 25, 50]:
+            if not player.slave_bet and balance >= player.temp_bet + chip:
+                chip_buttons.append(InlineKeyboardButton(
+                    f"💰 {chip}",
+                    callback_data=f"bj_bet_add:{self.chat_id}:{player_index}:{chip}"
+                ))
+            else:
+                chip_buttons.append(InlineKeyboardButton(
+                    f"❌ {chip}",
+                    callback_data="disabled"
+                ))
+        
+        if slave_info and not player.slave_bet and player.temp_bet == 0:
+            chip_buttons.append(InlineKeyboardButton(
+                "👤 Раб",
+                callback_data=f"bj_bet_slave:{self.chat_id}:{player_index}"
+            ))
+        else:
+            chip_buttons.append(InlineKeyboardButton(
+                "❌ Раб",
+                callback_data="disabled"
+            ))
+        
+        buttons.append(chip_buttons)
+        
+        # Кнопки управления
+        control_buttons = []
+        if player.temp_bet > 0 or player.slave_bet:
+            control_buttons.append(InlineKeyboardButton(
+                "🗑️ Сбросить",
+                callback_data=f"bj_bet_reset:{self.chat_id}:{player_index}"
+            ))
+            control_buttons.append(InlineKeyboardButton(
+                "✅ Принять",
+                callback_data=f"bj_bet_accept:{self.chat_id}:{player_index}"
+            ))
+        
+        if control_buttons:
+            buttons.append(control_buttons)
+        
+        return InlineKeyboardMarkup(buttons)
+
+async def cb_blackjack_bet_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработка добавления фишек к ставке"""
+    from economy import get_user_balance
+    
+    query = update.callback_query
+    if not query or not query.data or not query.from_user:
+        return
+    
+    await query.answer()
+    
+    # Парсим данные callback
+    try:
+        _, chat_id_str, player_index_str, chip_str = query.data.split(":")
+        chat_id = int(chat_id_str)
+        player_index = int(player_index_str)
+        chip = int(chip_str)
+    except (ValueError, IndexError):
+        await query.answer("❌ Ошибка обработки команды.", show_alert=True)
+        return
+    
+    # Проверяем, есть ли активная игра
+    if chat_id not in active_games:
+        await query.answer("❌ Игра уже завершена!", show_alert=True)
+        return
+    
+    game = active_games[chat_id]
+    
+    # Проверяем фазу ставок и правильного игрока
+    if (not game.is_betting_phase or 
+        player_index != game.current_betting_player or 
+        game.players[player_index].user_id != query.from_user.id):
+        await query.answer("❌ Сейчас не ваш ход для ставки!", show_alert=True)
+        return
+    
+    player = game.players[player_index]
+    
+    # Проверяем, что нет ставки рабом
+    if player.slave_bet:
+        await query.answer("❌ Нельзя добавлять деньги к ставке рабом!", show_alert=True)
+        return
+    
+    # Проверяем баланс
+    balance = get_user_balance(player.user_id)
+    if balance < player.temp_bet + chip:
+        await query.answer("❌ Недостаточно средств!", show_alert=True)
+        return
+    
+    # Добавляем фишку к ставке
+    player.temp_bet += chip
+    await query.answer(f"💰 Добавлено {chip} монет. Ставка: {player.temp_bet}", show_alert=False)
+    
+    # Обновляем сообщение
+    await update_betting_message(context, game, player_index)
+
 def create_signup_message(game: BlackjackGame, remaining_time: int) -> str:
     """Создать сообщение для набора игроков"""
     minutes = remaining_time // 60
@@ -239,16 +434,18 @@ def create_signup_message(game: BlackjackGame, remaining_time: int) -> str:
     if game.players:
         players_list = "\n\n👥 **Игроки:**\n"
         for i, player in enumerate(game.players, 1):
-            players_list += f"{i}. {player.first_name}\n"
+            balance = get_user_balance(player.user_id)
+            players_list += f"{i}. {player.first_name} (💰 {balance} монет)\n"
     
     return (
         f"🎰 **БЛЕКДЖЕК - НАБОР ИГРОКОВ**\n\n"
         f"⏰ Время на запись: **{minutes:02d}:{seconds:02d}**\n"
         f"👥 Игроков: **{len(game.players)}/{MAX_PLAYERS}**\n"
-        f"🎯 Минимум для начала: **{MIN_PLAYERS} игрока**\n\n"
+        f"🎯 Минимум для начала: **{MIN_PLAYERS} игрока**\n"
+        f"💰 **Минимальный баланс: 20 монет**\n\n"
         f"📋 **Правила:**\n"
         f"• Стандартная колода карт (52 карты)\n"
-        f"• Цель: набрать 21 очко или близко к этому\n"
+        f"• Цель: набрать 21 очко или **близко к этому** путем нажатием на Взять карту. Если вы превысите 21 очко - вы проиграете (перебор)\n"
         f"• Туз = 1 или 11, фигуры = 10\n"
         f"• Больше 21 = проигрыш\n\n"
         f"⚡ **Команды админа:**\n"
@@ -429,19 +626,51 @@ async def cb_blackjack_join(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     user = query.from_user
     username = user.username or ""
     
+    balance = get_user_balance(user.id)
+    if balance < 20:
+        await query.answer("❌ Для участия нужно минимум 20 монет на балансе!", show_alert=True)
+        return
+    
     # Пытаемся добавить игрока
     if game.add_player(user.id, username, user.first_name):
         await query.answer(f"✅ Вы присоединились к игре!", show_alert=False)
         logger.info(f"Player {user.first_name} ({user.id}) joined blackjack game in chat {chat_id}")
+        
+        try:
+            remaining_time = int(game.signup_end_time - time.time())
+            keyboard = game.get_signup_keyboard()
+            message_text = create_signup_message(game, remaining_time)
+            
+            if game.has_photo_message:
+                await context.bot.edit_message_caption(
+                    chat_id=game.chat_id,
+                    message_id=game.signup_message_id,
+                    caption=message_text,
+                    reply_markup=keyboard,
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            else:
+                await context.bot.edit_message_text(
+                    chat_id=game.chat_id,
+                    message_id=game.signup_message_id,
+                    text=message_text,
+                    reply_markup=keyboard,
+                    parse_mode=ParseMode.MARKDOWN
+                )
+        except Exception as e:
+            logger.warning(f"Failed to update signup message after player join: {e}")
+            
     else:
         # Проверяем, не добавлен ли уже игрок
         for player in game.players:
             if player.user_id == user.id:
-                await query.answer("❌ Вы уже в игре!", show_alert=True)
+                await query.answer("❌ Вы уже участвуете в игре!", show_alert=True)
                 return
         
-        # Игра переполнена
-        await query.answer("❌ Игра переполнена!", show_alert=True)
+        if len(game.players) >= MAX_PLAYERS:
+            await query.answer("❌ Игра заполнена! Максимум игроков достигнут.", show_alert=True)
+        else:
+            await query.answer("❌ Не удалось присоединиться к игре!", show_alert=True)
 
 async def cb_blackjack_hit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработка нажатия кнопки 'Взять карту'"""
@@ -680,7 +909,7 @@ async def dealer_turn(context: ContextTypes.DEFAULT_TYPE, game: BlackjackGame):
         reveal_text += f"{status_icon} **{player.first_name}:** {game.format_cards(player.cards)} (очки: {player.score})\n"
     
     if game.dealer_score < 17:
-        reveal_text += f"\n🤔 **Дилер должен брать карты (меньше 17)...**"
+        reveal_text += f"\n🤔 **Выбираю взять карту...**"
     elif game.dealer_score == 21:
         reveal_text += f"\n🎯 **У дилера блекджек!**"
     elif game.dealer_score > 21:
@@ -777,33 +1006,63 @@ async def dealer_turn(context: ContextTypes.DEFAULT_TYPE, game: BlackjackGame):
 
 async def end_game(context: ContextTypes.DEFAULT_TYPE, game: BlackjackGame):
     """Завершить игру и показать результаты"""
+    from economy import (get_user_balance, add_user_balance, get_user_slave, 
+                        set_user_slave, remove_user_slave, get_slave_owner)
+    
     results_message = "🎰 **РЕЗУЛЬТАТЫ ИГРЫ**\n\n"
     results_message += f"🏦 **Дилер:** {game.format_dealer_cards(hide_second=False)} (очки: {game.dealer_score})\n\n"
     
     results_message += "👥 **Результаты игроков:**\n"
     
+    winners = []
+    slave_players = []  # игроки, которые поставили рабов
+    slave_participating = []  # рабы, которые сами играют
+    
     for player in game.players:
         result_icon = ""
         result_text = ""
+        is_winner = False
+        result_type = "loss"  # по умолчанию поражение
         
         if player.is_bust:
             result_icon = "💥"
             result_text = "Перебор - Проигрыш"
+            result_type = "loss"
         elif player.is_blackjack and game.dealer_score != 21:
             result_icon = "🎯"
             result_text = "Блекджек - Победа!"
+            is_winner = True
+            result_type = "win"
         elif game.dealer_score > 21:
             result_icon = "🏆"
             result_text = "Победа! (у дилера перебор)"
+            is_winner = True
+            result_type = "win"
         elif player.score > game.dealer_score:
             result_icon = "🏆"
             result_text = "Победа!"
+            is_winner = True
+            result_type = "win"
         elif player.score == game.dealer_score:
             result_icon = "🤝"
             result_text = "Ничья"
+            result_type = "draw"
         else:
             result_icon = "😞"
             result_text = "Проигрыш"
+            result_type = "loss"
+        
+        if is_winner:
+            winners.append(player)
+        
+        if player.slave_bet:
+            slave_players.append(player)
+        
+        # Проверяем, является ли игрок рабом
+        if get_slave_owner(player.user_id):
+            slave_participating.append(player)
+        
+        update_player_stats(player.user_id, result_type, player.first_name)
         
         results_message += f"{result_icon} **{player.first_name}:** {game.format_cards(player.cards)} ({player.score}) - {result_text}\n"
     
@@ -816,32 +1075,413 @@ async def end_game(context: ContextTypes.DEFAULT_TYPE, game: BlackjackGame):
     except Exception as e:
         logger.error(f"Failed to send results message: {e}")
     
-    # Удаляем игру из активных
+    try:
+        await process_game_results(context, game, winners, slave_players, slave_participating)
+    except Exception as e:
+        logger.error(f"Error processing game results: {e}")
+    
+    # Удаляем игру из активных (всегда выполняется, даже если была ошибка в обработке результатов)
     if game.chat_id in active_games:
         del active_games[game.chat_id]
-    
-    logger.info(f"Blackjack game ended in chat {game.chat_id}")
+        logger.info(f"Game cleanup completed for chat {game.chat_id}")
 
-async def end_signup_phase(context: ContextTypes.DEFAULT_TYPE, game: BlackjackGame):
-    """Завершить фазу набора игроков и начать игру"""
-    # Проверяем минимальное количество игроков
-    if len(game.players) < MIN_PLAYERS:
-        try:
-            await context.bot.edit_message_text(
-                chat_id=game.chat_id,
-                message_id=game.signup_message_id,
-                text=f"❌ **ИГРА ОТМЕНЕНА**\n\nНедостаточно игроков для начала игры.\nТребуется минимум {MIN_PLAYERS} игрока, записалось: {len(game.players)}",
-                parse_mode=ParseMode.MARKDOWN
-            )
-        except Exception as e:
-            logger.error(f"Failed to update signup message: {e}")
+async def process_game_results(context, game, winners, slave_players, slave_participating):
+    """Обрабатывает результаты игры с упрощенной логикой рабов"""
+    from economy import (add_user_balance, get_user_slave, set_user_slave, 
+                        remove_user_slave, get_slave_owner)
+    
+    # Сначала обрабатываем обычные денежные выплаты для всех игроков
+    for player in game.players:
+        if not player.slave_bet:  # только денежные ставки
+            if player.is_blackjack and game.dealer_score != 21:
+                add_user_balance(player.user_id, int(player.bet * 2.5))
+            elif game.dealer_score > 21 and not player.is_bust:
+                add_user_balance(player.user_id, player.bet * 2)
+            elif player.score > game.dealer_score and not player.is_bust:
+                add_user_balance(player.user_id, player.bet * 2)
+            elif player.score == game.dealer_score and not player.is_bust:
+                add_user_balance(player.user_id, player.bet)
+    
+    # Теперь обрабатываем ставки рабами по упрощенным правилам
+    for slave_player in slave_players:
+        slave_info = slave_player.slave_bet_info
+        if not slave_info:
+            continue
+            
+        slave_id = slave_info["slave_id"]
+        slave_name = slave_info["slave_name"]
+        purchase_price = slave_info["purchase_price"]
+        owner = slave_player  # хозяин
         
-        # Удаляем игру из активных
-        if game.chat_id in active_games:
-            del active_games[game.chat_id]
+        # Проверяем, участвует ли раб в игре как игрок
+        slave_as_player = next((p for p in game.players if p.user_id == slave_id), None)
+        slave_is_winner = slave_as_player and slave_as_player in winners
+        
+        slave_has_tie = slave_as_player and not slave_as_player.is_bust and slave_as_player.score == game.dealer_score
+        
+        if slave_has_tie:
+            set_user_slave(owner.user_id, slave_id, purchase_price, slave_name)
+            await context.bot.send_message(
+                chat_id=game.chat_id,
+                text=f"🤝 Раб {slave_name} сыграл вничью с дилером - остается у хозяина {owner.first_name}"
+            )
+            continue
+        
+        if not winners:  # дилер единственный победитель
+            set_user_slave(owner.user_id, slave_id, purchase_price, slave_name)
+            # Хозяину выдается штраф в размере стоимости покупки раба
+            add_user_balance(owner.user_id, -purchase_price)  # отнимаем деньги (штраф)
+            
+            await context.bot.send_message(
+                chat_id=game.chat_id,
+                text=f"🏦 Дилер выиграл! Раб {slave_name} остается у хозяина {owner.first_name}, но хозяин получает штраф {purchase_price} монет"
+            )
+            continue
+        
+        # Правило 1: Если один из победителей сам раб - он получает ТОЛЬКО свободу
+        if slave_is_winner:
+            # Раб получает свободу
+            await context.bot.send_message(
+                chat_id=game.chat_id,
+                text=f"🎉 Раб {slave_name} выиграл и получил свободу!"
+            )
+            try:
+                await context.bot.send_message(
+                    chat_id=slave_id,
+                    text=f"🎉 Вы выиграли в блекджек и получили свободу!"
+                )
+            except:
+                pass
+            
+            # Остальные победители (кроме раба) получают деньги поровну
+            other_winners = [w for w in winners if w.user_id != slave_id]
+            if other_winners:
+                share_per_winner = purchase_price // len(other_winners)
+                for winner in other_winners:
+                    add_user_balance(winner.user_id, share_per_winner)
+                
+                await context.bot.send_message(
+                    chat_id=game.chat_id,
+                    text=f"💰 {len(other_winners)} других победителей получают по {share_per_winner} монет за освобожденного раба"
+                )
+            continue
+        
+        # Правило 2: Если победитель один и это хозяин - получает раба обратно + деньги
+        if len(winners) == 1 and winners[0] == owner:
+            set_user_slave(owner.user_id, slave_id, purchase_price, slave_name)
+            # Денежный выигрыш уже начислен выше
+            await context.bot.send_message(
+                chat_id=game.chat_id,
+                text=f"🏆 {owner.first_name} выиграл и возвращает себе раба {slave_name}!"
+            )
+            continue
+        
+        # Правило 3: Если победитель один и он НЕ бот и НЕ раб - получает раба
+        if len(winners) == 1:
+            winner = winners[0]
+            # Проверяем, что победитель не раб
+            if not get_slave_owner(winner.user_id):
+                set_user_slave(winner.user_id, slave_id, purchase_price, slave_name)
+                await context.bot.send_message(
+                    chat_id=game.chat_id,
+                    text=f"👑 {winner.first_name} выиграл и получает раба {slave_name}!"
+                )
+                try:
+                    await context.bot.send_message(
+                        chat_id=slave_id,
+                        text=f"⛓️ У вас новый хозяин: {winner.first_name}!"
+                    )
+                except:
+                    pass
+                continue
+        
+        # Правило 4: Во всех остальных случаях раб считается как деньги
+        # Победители получают долю от стоимости раба
+        if winners:
+            share_per_winner = purchase_price // len(winners)
+            for winner in winners:
+                add_user_balance(winner.user_id, share_per_winner)
+            
+            await context.bot.send_message(
+                chat_id=game.chat_id,
+                text=f"💰 {len(winners)} победителей получают по {share_per_winner} монет за раба {slave_name}"
+            )
+
+
+async def show_betting_for_player(context: ContextTypes.DEFAULT_TYPE, game: BlackjackGame, player_index: int):
+    """Показать интерфейс ставок для игрока"""
+    from economy import get_user_balance, get_user_slave
+    
+    player = game.players[player_index]
+    balance = get_user_balance(player.user_id)
+    slave_info = get_user_slave(player.user_id)
+    
+    betting_text = f"🎰 **БЛЕКДЖЕК - СТАВКИ**\n\n"
+    betting_text += f"👤 **Ход игрока:** {player.first_name}\n"
+    betting_text += f"💰 **Баланс:** {balance} монет\n"
+    
+    if player.slave_bet and player.slave_bet_info:
+        betting_text += f"👤 **Ставка:** Раб {player.slave_bet_info['slave_name']}\n\n"
+    else:
+        betting_text += f"🎯 **Текущая ставка:** {player.temp_bet} монет\n\n"
+    
+    # Показываем других игроков и их ставки
+    betting_text += "👥 **Игроки:**\n"
+    for i, p in enumerate(game.players):
+        if i < player_index:
+            if p.slave_bet and p.slave_bet_info:
+                betting_text += f"✅ **{p.first_name}:** Раб {p.slave_bet_info['slave_name']}\n"
+            else:
+                betting_text += f"✅ **{p.first_name}:** {p.bet} монет\n"
+        elif i == player_index:
+            betting_text += f"👉 **{p.first_name}:** делает ставку...\n"
+        else:
+            betting_text += f"⏳ **{p.first_name}:** ожидает\n"
+    
+    betting_text += f"\n💡 **Выберите фишки для ставки:**"
+    
+    keyboard = game.get_betting_keyboard(player_index)
+    
+    try:
+        betting_msg = await context.bot.send_message(
+            chat_id=game.chat_id,
+            text=betting_text,
+            reply_markup=keyboard,
+            parse_mode=ParseMode.MARKDOWN
+        )
+        game.game_messages.append(betting_msg.message_id)
+    except Exception as e:
+        logger.error(f"Failed to send betting message: {e}")
+
+async def cb_blackjack_bet_slave(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработка ставки рабом"""
+    from economy import get_user_slave, remove_user_slave
+    
+    query = update.callback_query
+    if not query or not query.data or not query.from_user:
         return
     
-    await animated_card_dealing(context, game)
+    await query.answer()
+    
+    # Парсим данные callback
+    try:
+        _, chat_id_str, player_index_str = query.data.split(":")
+        chat_id = int(chat_id_str)
+        player_index = int(player_index_str)
+    except (ValueError, IndexError):
+        await query.answer("❌ Ошибка обработки команды.", show_alert=True)
+        return
+    
+    # Проверяем, есть ли активная игра
+    if chat_id not in active_games:
+        await query.answer("❌ Игра уже завершена!", show_alert=True)
+        return
+    
+    game = active_games[chat_id]
+    
+    # Проверяем фазу ставок и правильного игрока
+    if (not game.is_betting_phase or 
+        player_index != game.current_betting_player or 
+        game.players[player_index].user_id != query.from_user.id):
+        await query.answer("❌ Сейчас не ваш ход для ставки!", show_alert=True)
+        return
+    
+    player = game.players[player_index]
+    slave_info = get_user_slave(player.user_id)
+    
+    # Проверяем, есть ли раб
+    if not slave_info:
+        await query.answer("❌ У вас нет раба!", show_alert=True)
+        return
+    
+    # Проверяем, что нет денежной ставки
+    if player.temp_bet > 0:
+        await query.answer("❌ Нельзя ставить раба вместе с деньгами!", show_alert=True)
+        return
+    
+    # Ставим раба
+    player.slave_bet = True
+    player.slave_bet_info = slave_info.copy()
+    
+    # Забираем раба у игрока
+    remove_user_slave(player.user_id)
+    
+    await query.answer(f"👤 Поставлен раб: {slave_info['slave_name']}", show_alert=False)
+    
+    # Обновляем сообщение
+    await update_betting_message(context, game, player_index)
+
+async def update_betting_message(context, game, player_index):
+    """Обновляет сообщение ставок"""
+    from economy import get_user_balance, get_user_slave
+    
+    player = game.players[player_index]
+    balance = get_user_balance(player.user_id)
+    
+    betting_text = f"🎰 **БЛЕКДЖЕК - СТАВКИ**\n\n"
+    betting_text += f"👤 **Ход игрока:** {player.first_name}\n"
+    betting_text += f"💰 **Баланс:** {balance} монет\n"
+    
+    if player.slave_bet and player.slave_bet_info:
+        betting_text += f"👤 **Ставка:** Раб {player.slave_bet_info['slave_name']}\n\n"
+    else:
+        betting_text += f"🎯 **Текущая ставка:** {player.temp_bet} монет\n\n"
+    
+    # Показываем других игроков и их ставки
+    betting_text += "👥 **Игроки:**\n"
+    for i, p in enumerate(game.players):
+        if i < player_index:
+            if p.slave_bet and p.slave_bet_info:
+                betting_text += f"✅ **{p.first_name}:** Раб {p.slave_bet_info['slave_name']}\n"
+            else:
+                betting_text += f"✅ **{p.first_name}:** {p.bet} монет\n"
+        elif i == player_index:
+            betting_text += f"👉 **{p.first_name}:** делает ставку...\n"
+        else:
+            betting_text += f"⏳ **{p.first_name}:** ожидает\n"
+    
+    betting_text += f"\n💡 **Выберите фишки для ставки:**"
+    
+    keyboard = game.get_betting_keyboard(player_index)
+    
+    try:
+        await context.bot.edit_message_text(
+            chat_id=game.chat_id,
+            message_id=game.game_messages[-1],
+            text=betting_text,
+            reply_markup=keyboard,
+            parse_mode=ParseMode.MARKDOWN
+        )
+    except Exception as e:
+        logger.error(f"Failed to update betting message: {e}")
+
+async def cb_blackjack_bet_reset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработка сброса ставки"""
+    from economy import get_user_balance, set_user_slave
+    
+    query = update.callback_query
+    if not query or not query.data or not query.from_user:
+        return
+    
+    await query.answer()
+    
+    # Парсим данные callback
+    try:
+        _, chat_id_str, player_index_str = query.data.split(":")
+        chat_id = int(chat_id_str)
+        player_index = int(player_index_str)
+    except (ValueError, IndexError):
+        await query.answer("❌ Ошибка обработки команды.", show_alert=True)
+        return
+    
+    # Проверяем, есть ли активная игра
+    if chat_id not in active_games:
+        await query.answer("❌ Игра уже завершена!", show_alert=True)
+        return
+    
+    game = active_games[chat_id]
+    
+    # Проверяем фазу ставок и правильного игрока
+    if (not game.is_betting_phase or 
+        player_index != game.current_betting_player or 
+        game.players[player_index].user_id != query.from_user.id):
+        await query.answer("❌ Сейчас не ваш ход для ставки!", show_alert=True)
+        return
+    
+    player = game.players[player_index]
+    
+    if player.slave_bet and player.slave_bet_info:
+        slave_info = player.slave_bet_info
+        set_user_slave(player.user_id, slave_info["slave_id"], 
+                      slave_info["purchase_price"], slave_info["slave_name"])
+        player.slave_bet = False
+        player.slave_bet_info = None
+        await query.answer("🗑️ Ставка раба сброшена!", show_alert=False)
+    else:
+        player.temp_bet = 0
+        await query.answer("🗑️ Ставка сброшена!", show_alert=False)
+    
+    # Обновляем сообщение
+    await update_betting_message(context, game, player_index)
+
+async def cb_blackjack_bet_accept(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработка принятия ставки"""
+    from economy import get_user_balance, add_user_balance
+    
+    query = update.callback_query
+    if not query or not query.data or not query.from_user:
+        return
+    
+    await query.answer()
+    
+    # Парсим данные callback
+    try:
+        _, chat_id_str, player_index_str = query.data.split(":")
+        chat_id = int(chat_id_str)
+        player_index = int(player_index_str)
+    except (ValueError, IndexError):
+        await query.answer("❌ Ошибка обработки команды.", show_alert=True)
+        return
+    
+    # Проверяем, есть ли активная игра
+    if chat_id not in active_games:
+        await query.answer("❌ Игра уже завершена!", show_alert=True)
+        return
+    
+    game = active_games[chat_id]
+    
+    # Проверяем фазу ставок и правильного игрока
+    if (not game.is_betting_phase or 
+        player_index != game.current_betting_player or 
+        game.players[player_index].user_id != query.from_user.id):
+        await query.answer("❌ Сейчас не ваш ход для ставки!", show_alert=True)
+        return
+    
+    player = game.players[player_index]
+    
+    if player.slave_bet:
+        # Ставка рабом
+        if not player.slave_bet_info:
+            await query.answer("❌ Ошибка данных раба!", show_alert=True)
+            return
+        
+        player.bet = player.slave_bet_info["purchase_price"]  # для отображения
+        await query.answer(f"✅ Ставка рабом {player.slave_bet_info['slave_name']} принята!", show_alert=False)
+    else:
+        # Денежная ставка
+        if player.temp_bet <= 0:
+            await query.answer("❌ Сделайте ставку перед принятием!", show_alert=True)
+            return
+        
+        # Списываем деньги и подтверждаем ставку
+        if not add_user_balance(player.user_id, -player.temp_bet):
+            await query.answer("❌ Ошибка списания средств!", show_alert=True)
+            return
+        
+        player.bet = player.temp_bet
+        await query.answer(f"✅ Ставка {player.bet} монет принята!", show_alert=False)
+    
+    player.temp_bet = 0
+    
+    # Переходим к следующему игроку или начинаем игру
+    game.current_betting_player += 1
+    
+    if game.current_betting_player >= len(game.players):
+        # Все игроки сделали ставки, начинаем игру
+        game.is_betting_phase = False
+        await animated_card_dealing(context, game)
+    else:
+        # Переходим к следующему игроку
+        try:
+            await context.bot.delete_message(
+                chat_id=game.chat_id,
+                message_id=game.game_messages[-1]
+            )
+            game.game_messages.pop()
+        except Exception as e:
+            logger.warning(f"Failed to delete betting message: {e}")
+        
+        await show_betting_for_player(context, game, game.current_betting_player)
 
 async def animated_card_dealing(context: ContextTypes.DEFAULT_TYPE, game: BlackjackGame):
     """Анимированная раздача карт"""
@@ -925,7 +1565,7 @@ async def animated_card_dealing(context: ContextTypes.DEFAULT_TYPE, game: Blackj
     updated_text += f"🏦 **Дилер:** {dealer_first_card}\n\n"
     updated_text += "👥 **Игроки получили:**\n"
     for player in game.players:
-        updated_text += f"• **{player.first_name}:** {game.format_cards(player.cards)}\n"
+        updated_text += f"• **{player.first_name}:** {game.format_cards(p.cards)}\n"
     
     try:
         await context.bot.edit_message_text(
@@ -1064,6 +1704,49 @@ async def update_signup_timer(context: ContextTypes.DEFAULT_TYPE, game: Blackjac
     # Время вышло или игра началась досрочно
     if game.is_signup_phase:
         await end_signup_phase(context, game)
+
+async def end_signup_phase(context: ContextTypes.DEFAULT_TYPE, game: BlackjackGame):
+    """Завершить фазу набора игроков"""
+    if len(game.players) < MIN_PLAYERS:
+        # Недостаточно игроков - отменяем игру
+        cancel_text = f"❌ **ИГРА ОТМЕНЕНА**\n\nНедостаточно игроков для начала игры!\nТребуется минимум {MIN_PLAYERS} игрока, записалось: {len(game.players)}"
+        
+        try:
+            if game.has_photo_message:
+                await context.bot.edit_message_caption(
+                    chat_id=game.chat_id,
+                    message_id=game.signup_message_id,
+                    caption=cancel_text,
+                    reply_markup=None,
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            else:
+                await context.bot.edit_message_text(
+                    chat_id=game.chat_id,
+                    message_id=game.signup_message_id,
+                    text=cancel_text,
+                    reply_markup=None,
+                    parse_mode=ParseMode.MARKDOWN
+                )
+        except Exception as e:
+            logger.error(f"Failed to send cancel message: {e}")
+        
+        # Удаляем игру из активных
+        if game.chat_id in active_games:
+            del active_games[game.chat_id]
+        
+        logger.info(f"Blackjack game cancelled in chat {game.chat_id} - not enough players")
+        return
+    
+    # Достаточно игроков - начинаем фазу ставок
+    game.is_signup_phase = False
+    game.is_betting_phase = True
+    game.current_betting_player = 0
+    
+    logger.info(f"Starting betting phase for blackjack game in chat {game.chat_id} with {len(game.players)} players")
+    
+    # Показываем интерфейс ставок для первого игрока
+    await show_betting_for_player(context, game, 0)
 
 async def message_filter_task(context: ContextTypes.DEFAULT_TYPE, game: BlackjackGame):
     """Задача для удаления сообщений не от игроков во время игры"""

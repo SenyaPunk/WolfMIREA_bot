@@ -24,7 +24,10 @@ from marriages import cmd_marry, cmd_marriages, cmd_divorce, cb_marry, cmd_expan
 from kisses import cmd_kiss
 from drinking import cmd_drink, cb_drink
 from selfcare import cmd_selfcare, cb_ribs
-from blackjack import cmd_blackjack, cmd_blackjack_add_time, cmd_blackjack_start, cb_blackjack_join, cb_blackjack_hit, cb_blackjack_stand
+from blackjack import cmd_blackjack, cmd_blackjack_add_time, cmd_blackjack_start, cb_blackjack_join, cb_blackjack_hit, cb_blackjack_stand, cb_blackjack_bet_reset, cb_blackjack_bet_accept, cb_blackjack_bet_slave, cb_blackjack_bet_add
+from economy import cmd_balance, cmd_give_coins, cmd_take_coins, cmd_set_balance, cmd_slave, cmd_buyout, cmd_free_slave_owner
+from work import cmd_work, cb_work_click
+from top import cmd_top, cb_top_switch
 
 logging.basicConfig(
     level=logging.INFO,
@@ -84,7 +87,18 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             "• Кого-нибудь трахнуть: /трахнуть\n"
             "• Выпить алкоголь: /выпить\n"
             "• Самоотсос для одиноких: /самоотсос\n"
-            "• Блекджек: /блекджек"
+            "• Блекджек: /блекджек\n\n"
+            "Экономика:\n"
+            "• Проверить баланс: /balance\n"
+            "• Дать монеты: /give_coins\n"
+            "• Забрать монеты: /take_coins\n"
+            "• Установить баланс: /set_balance\n"
+            "• Работать: /work\n\n"
+            "Система рабства:\n"
+            "• Купить раба: /раб @username\n"
+            "• Выкупить себя: /выкуп\n"
+            "• Освободить раба: /освободить_раба\n"
+            "• Информация о рабстве теперь в /balance"
         )
         return
 
@@ -150,6 +164,16 @@ def bootstrap_application() -> Application:
     app.add_handler(CommandHandler("admin_add", admin_add))
     app.add_handler(CommandHandler("admin_remove", admin_remove))
 
+    # экономика
+    app.add_handler(CommandHandler("balance", cmd_balance))
+    app.add_handler(CommandHandler("give_coins", cmd_give_coins))
+    app.add_handler(CommandHandler("take_coins", cmd_take_coins))
+    app.add_handler(CommandHandler("set_balance", cmd_set_balance))
+    app.add_handler(CommandHandler("work", cmd_work))
+    app.add_handler(MessageHandler(filters.Regex(r"^/раб(?:@\w+)?(?:\s|$)"), cmd_slave))
+    app.add_handler(MessageHandler(filters.Regex(r"^/выкуп(?:@\w+)?(?:\s|$)"), cmd_buyout))
+    app.add_handler(MessageHandler(filters.Regex(r"^/освободить_раба(?:@\w+)?(?:\s|$)"), cmd_free_slave_owner))
+
     # кастом
     app.add_handler(CommandHandler("cc_set", cc_cmd_set))
     app.add_handler(CommandHandler("cc_set_photo", cc_cmd_set_photo))
@@ -163,6 +187,10 @@ def bootstrap_application() -> Application:
     app.add_handler(CallbackQueryHandler(cb_blackjack_join, pattern=r"^bj_join:"))
     app.add_handler(CallbackQueryHandler(cb_blackjack_hit, pattern=r"^bj_hit:"))
     app.add_handler(CallbackQueryHandler(cb_blackjack_stand, pattern=r"^bj_stand:"))
+    app.add_handler(CallbackQueryHandler(cb_blackjack_bet_add, pattern=r"^bj_bet_add:"))
+    app.add_handler(CallbackQueryHandler(cb_blackjack_bet_reset, pattern=r"^bj_bet_reset:"))
+    app.add_handler(CallbackQueryHandler(cb_blackjack_bet_accept, pattern=r"^bj_bet_accept:"))
+    app.add_handler(CallbackQueryHandler(cb_blackjack_bet_slave, pattern=r"^bj_bet_slave:"))
 
     # браки
     app.add_handler(CommandHandler(["marry"], cmd_marry, filters=filters.ChatType.GROUPS))
@@ -181,10 +209,14 @@ def bootstrap_application() -> Application:
     app.add_handler(MessageHandler(filters.ChatType.GROUPS & filters.Regex(r"^/самоотсос(?:@\w+)?(?:\s|$)"), cmd_selfcare))
     app.add_handler(CallbackQueryHandler(cb_drink, pattern=r"^drink:"))
     app.add_handler(CallbackQueryHandler(cb_ribs, pattern=r"^ribs:"))
+    app.add_handler(CallbackQueryHandler(cb_work_click, pattern=r"^work_click:"))
+
+    # top command handler
+    app.add_handler(CommandHandler("top", cmd_top))
+    app.add_handler(CallbackQueryHandler(cb_top_switch, pattern=r"^top_switch:"))
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, custom_command_router))
     app.add_handler(MessageHandler(filters.Regex(r"^/"), custom_command_router))
-
 
     store = load_store()
     for chat_id_str, cfg in store.items():

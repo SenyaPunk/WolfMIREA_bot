@@ -25,7 +25,8 @@ RESERVED_COMMANDS = {
     "marry", "marriages", "divorce", "expand", "close_marriage",
     "брак", "браки", "развод", "расширить", "закрыть_брак", "трахнуть", "выпить", "самоотсос",
     "admin_claim", "admins", "admin_add", "admin_remove",
-    "cc_set", "cc_set_photo", "cc_remove", "cc_list"
+    "cc_set", "cc_set_photo", "cc_remove", "cc_list",
+    "баланс", "balance", "give_coins", "take_coins", "set_balance", "work"
 }
 
 # Константы для системы браков
@@ -49,6 +50,9 @@ HELP_TEXT = """
 • /трахнуть — трахнуть пользователя в чате
 • /выпить — набухаться в хлам
 • /самоотсос — самоотсос для одиноких (кулдаун 2 часа, можно сломать ребра)
+
+Экономика:
+• /баланс — посмотреть свой баланс
 
 Кастомные команды:
 • /cc_set <команда> <текст> — создать текстовую команду
